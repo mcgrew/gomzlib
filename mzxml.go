@@ -6,7 +6,6 @@ import (
   "io"
 )
 
-
 type mzxmlscan struct {
   Peaks peaks `xml:"peaks"`
   Scans []mzxmlscan `xml:"scan"`
@@ -86,15 +85,19 @@ func (r *RawData) ReadMzXml(filename string) error {
   for i:=0; i < len(mz.Scans); i++ {
     s := new(Scan)
     scanInfo(s, &(mz.Scans[i]))
-    _ = append(scans, *s)
+    scans = append(scans, *s)
     if len(mz.Scans[i].Scans) > 0 {
       for j:=0; j < len(mz.Scans[i].Scans); j++ {
         s := new(Scan)
         scanInfo(s, &(mz.Scans[i]))
-        _ = append(scans, *s)
+        scans = append(scans, *s)
       }
     }
   }
+  return nil
+}
+
+func (r *RawData) WriteMzXml(filename string) error {
   return nil
 }
 
