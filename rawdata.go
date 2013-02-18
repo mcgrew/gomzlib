@@ -26,8 +26,9 @@ type Scan struct {
   MsLevel uint8
   Id uint64
   MzRange [2]float64
-  ParentScan *Scan
+  ParentScan uint64
   PrecursorMz float64
+  PrecursorIntensity float64
   CollisionEnergy float64
   MzArray []float64
   IntensityArray []float64
