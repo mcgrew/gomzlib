@@ -126,9 +126,7 @@ func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
   s.PrecursorIntensity = mzs.Precursor.Intensity
   s.CollisionEnergy = mzs.CollisionEnergy
   // now decode the peak data
-  decoder := base64.NewEncoding("encodeStd")
-  peakData,_ := decoder.DecodeString(mzs.Peaks.PeakList)
-  println(mzs.Peaks.PeakList)
+  peakData,_ := base64.StdEncoding.DecodeString(mzs.Peaks.PeakList)
   println(len(peakData)) // something wrong here
   s.MzArray = make([]float64,mzs.PeakCount,mzs.PeakCount)
   s.IntensityArray = make([]float64,mzs.PeakCount,mzs.PeakCount)
@@ -140,57 +138,61 @@ func decodePeaks(mz *[]float64, intensity *[]float64, peakData []byte,
                  precision uint8, byteorder string, pairOrder string) {
   // this whole thing is a bit messy, could probably be done more efficiently
   // assume big endian for now (byteOrder "network")
-  pos := 0
+  pos := -1
   if precision == 32 {
     const typesize int = 4
-    for pos < len(peakData) {
+    n := len(peakData)-2
+    for pos < n {
       var value uint32 = 0
       for i := 0; i < typesize; i++ {
+        pos++
         value <<= 8
         value = value | uint32(peakData[pos])
-        pos++
       }
       if pairOrder == "m/z-int" {
-        (*mz)[pos % typesize] = float64(math.Float32frombits(value))
+        (*mz)[pos / (typesize*2)] = float64(math.Float32frombits(value))
       } else {
-        (*intensity)[pos % typesize] = float64(math.Float32frombits(value))
+        (*intensity)[pos / (typesize*2)] = float64(math.Float32frombits(value))
       }
       value = 0
       for i := 0; i < typesize; i++ {
+        pos++
         value <<= 8
         value |= uint32(peakData[pos])
-        pos++
       }
       if pairOrder == "m/z-int" {
-        (*intensity)[pos % typesize] = float64(math.Float32frombits(value))
+        (*intensity)[pos / (typesize*2)] = float64(math.Float32frombits(value))
       } else {
-        (*mz)[pos % typesize] = float64(math.Float32frombits(value))
+        (*mz)[pos / (typesize*2)] = float64(math.Float32frombits(value))
       }
     }
   } else {
-//    var value uint64 = 0
-//    const typesize int = 8
-//    for i := 0; i < typesize; i++ {
-//      value <<= 8
-//      value |= uint64(peakData[pos])
-//      pos++
-//    }
-//    if pairOrder == "m/z-int" {
-//      (*mz)[pos % typesize] = math.Float64frombits(value)
-//    } else {
-//      (*intensity)[pos % typesize] = math.Float64frombits(value)
-//    }
-//    value = 0
-//    for i := 0; i < typesize; i++ {
-//      value <<= 8
-//      value |= uint64(peakData[pos])
-//      pos++
-//    }
-//    if pairOrder == "m/z-int" {
-//      (*intensity)[pos % typesize] = math.Float64frombits(value)
-//    } else {
-//      (*mz)[pos % typesize] = math.Float64frombits(value)
-//    }
+    const typesize int = 8
+    n := len(peakData)-2
+    for pos < n {
+      var value uint64 = 0
+      for i := 0; i < typesize; i++ {
+        pos++
+        value <<= 8
+        value = value | uint64(peakData[pos])
+      }
+      if pairOrder == "m/z-int" {
+        (*mz)[pos / (typesize*2)] = float64(math.Float64frombits(value))
+      } else {
+        (*intensity)[pos / (typesize*2)] = float64(math.Float64frombits(value))
+      }
+      value = 0
+      for i := 0; i < typesize; i++ {
+        pos++
+        value <<= 8
+        value |= uint64(peakData[pos])
+      }
+      if pairOrder == "m/z-int" {
+        (*intensity)[pos / (typesize*2)] = float64(math.Float64frombits(value))
+      } else {
+        (*mz)[pos / (typesize*2)] = float64(math.Float64frombits(value))
+      }
+    }
   }
 }
 
