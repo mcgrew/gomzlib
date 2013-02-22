@@ -8,10 +8,7 @@ import(
 // Converts a base64 string to an array of float64
 func Float64FromBase64 (dst *[]float64, src string, 
                         precision uint8, byteOrder bool) int {
-  println(src)
-//  pos := 0
   n := len(src)
-//  byteCount := n * 6 / 8;
   shift := uint8(0)
   if precision == 32 {
     var value uint32 = 0

@@ -18,6 +18,9 @@ type Instrument struct {
   Model string
   MassAnalyzer string
   Detector string
+  Resolution float64
+  Accuracy float64
+  Ionization string
 }
 
 type Scan struct {
@@ -30,6 +33,8 @@ type Scan struct {
   PrecursorMz float64
   PrecursorIntensity float64
   CollisionEnergy float64
+  Continuous bool
+  DeIsotoped bool
   MzArray []float64
   IntensityArray []float64
 }
@@ -87,7 +92,7 @@ func (r *RawData) Read(filename string) error {
                                 filename[strings.LastIndex(filename,"."):]))
 }
 
-func (r *RawData) write(filename string) error {
+func (r *RawData) Write(filename string) error {
   return nil
 }
 

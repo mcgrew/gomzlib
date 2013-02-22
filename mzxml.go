@@ -5,10 +5,21 @@ import (
   "os"
   "io"
   "strconv"
+  "errors"
 )
 
 type mzxml struct {
-  Run msrun `xml:"msRun"`
+  Run struct {
+    ScanCount uint64 `xml:"scanCount,attr"`
+    SourceFile struct {
+      Name string `xml:"fileName,attr"`
+    } `xml:"parentFile"`
+    Instrument msinstrument `xml:"msInstrument"`
+    Processing struct {
+      Centroided int8 `xml:"centroided,attr"`
+    } `xml:"dataProcessing"`
+    Scans []mzxmlscan `xml:"scan"`
+  } `xml:"msRun"`
 }
 
 type mzxmlscan struct {
@@ -50,31 +61,40 @@ type msinstrument struct {
   } `xml:"msMassAnalyzer"`
 }
 
-type msrun struct {
-  ScanCount uint64 `xml:"scanCount,attr"`
-  SourceFile struct {
-    Name string `xml:"fileName,attr"`
-  } `xml:"parentFile"`
-  Instrument msinstrument `xml:"msInstrument"`
-  Scans []mzxmlscan `xml:"scan"`
-}
-
+// Reads data from an MzXML file
+//
+// Paramters:
+//   filename: The name of the file to read from
+//
+// Return value:
+//   error: Indicates whether or not an error occurred while reading the file
 func (r *RawData) ReadMzXml(filename string) error {
-  mz := mzxml{}
   file,err := os.Open(filename)
   if err != nil {
     return err
   }
   reader := io.Reader(file)
+  return r.DecodeMzXml( reader )
+}
+
+// Decodes data from a Reader containing MzXML formatted data
+//
+// Parameters:
+//   reader: The reader to read raw data from
+//
+// Return value:
+//   error: Indicates whether or not an error occurred when reading the data
+func (r *RawData) DecodeMzXml(reader io.Reader) error {
+  mz := mzxml{}
   decoder := xml.NewDecoder(reader)
   // set up a dummy CharsetReader
   decoder.CharsetReader =
     func (charset string, input io.Reader) (io.Reader, error){
       return input, nil
     }
-  err = decoder.Decode(&mz)
-  if err != nil {
-    return err
+  e := decoder.Decode(&mz)
+  if e != nil {
+    return e
   }
   r.SourceFile = mz.Run.SourceFile.Name
   r.Instrument.Model = mz.Run.Instrument.Model.Name
@@ -85,11 +105,13 @@ func (r *RawData) ReadMzXml(filename string) error {
   // copy scan information
   for i:=0; i < len(mz.Run.Scans); i++ {
     s := new(Scan)
+    s.Continuous = mz.Run.Processing.Centroided == 0
     scanInfo(s, &(mz.Run.Scans[i]), 0)
     scans = append(scans, *s)
     if len(mz.Run.Scans[i].Scans) > 0 {
       for j:=0; j < len(mz.Run.Scans[i].Scans); j++ {
         s := new(Scan)
+        s.Continuous = mz.Run.Processing.Centroided == 0
         scanInfo(s, &(mz.Run.Scans[i].Scans[j]), mz.Run.Scans[i].Id)
         scans = append(scans, *s)
       }
@@ -99,10 +121,23 @@ func (r *RawData) ReadMzXml(filename string) error {
   return nil
 }
 
+// Writes the data to disk in MzXML format
+//
+// Parameters:
+//   filename: The name of the file to be written to
+//
+// Return value:
+//   error: Indicates whether or not an error occurred while writing the file
 func (r *RawData) WriteMzXml(filename string) error {
-  return nil
+  return errors.New("Writing this file type has not yet been implemented")
 }
 
+// Decodes scan information read from a file
+//
+// Parameters:
+//   s: A pointer to the Scan struct to save the decoded data to
+//   mzs: A pointer to the mzxmlscan object to read the data from
+//   parentScan: The Id of the parent scan, or 0 if none
 func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
   rt := mzs.RetentionTime
   s.RetentionTime,_ = strconv.ParseFloat(rt[2:len(rt)-1], 64)
