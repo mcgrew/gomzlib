@@ -2,11 +2,9 @@ package mzlib
 
 import (
   "encoding/xml"
-  "encoding/base64"
   "os"
   "io"
   "strconv"
-  "math"
 )
 
 type mzxml struct {
@@ -63,7 +61,6 @@ type msrun struct {
 
 func (r *RawData) ReadMzXml(filename string) error {
   mz := mzxml{}
-//  xmldata [0]byte
   file,err := os.Open(filename)
   if err != nil {
     return err
@@ -125,76 +122,17 @@ func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
   s.PrecursorMz = mzs.Precursor.Mz
   s.PrecursorIntensity = mzs.Precursor.Intensity
   s.CollisionEnergy = mzs.CollisionEnergy
-  // now decode the peak data
-  peakData,_ := base64.StdEncoding.DecodeString(mzs.Peaks.PeakList)
-  println(len(peakData)) // something wrong here
-  s.MzArray = make([]float64,mzs.PeakCount,mzs.PeakCount)
-  s.IntensityArray = make([]float64,mzs.PeakCount,mzs.PeakCount)
-  decodePeaks(&s.MzArray, &s.IntensityArray, peakData,
-              mzs.Peaks.Precision, mzs.Peaks.ByteOrder, mzs.Peaks.PairOrder)
-}
 
-func decodePeaks(mz *[]float64, intensity *[]float64, peakData []byte,
-                 precision uint8, byteorder string, pairOrder string) {
-  // this whole thing is a bit messy, could probably be done more efficiently
-  // assume big endian for now (byteOrder "network")
-  pos := -1
-  if precision == 32 {
-    const typesize int = 4
-    n := len(peakData)-2
-    for pos < n {
-      var value uint32 = 0
-      for i := 0; i < typesize; i++ {
-        pos++
-        value <<= 8
-        value = value | uint32(peakData[pos])
-      }
-      if pairOrder == "m/z-int" {
-        (*mz)[pos / (typesize*2)] = float64(math.Float32frombits(value))
-      } else {
-        (*intensity)[pos / (typesize*2)] = float64(math.Float32frombits(value))
-      }
-      value = 0
-      for i := 0; i < typesize; i++ {
-        pos++
-        value <<= 8
-        value |= uint32(peakData[pos])
-      }
-      if pairOrder == "m/z-int" {
-        (*intensity)[pos / (typesize*2)] = float64(math.Float32frombits(value))
-      } else {
-        (*mz)[pos / (typesize*2)] = float64(math.Float32frombits(value))
-      }
-    }
-  } else {
-    const typesize int = 8
-    n := len(peakData)-2
-    for pos < n {
-      var value uint64 = 0
-      for i := 0; i < typesize; i++ {
-        pos++
-        value <<= 8
-        value = value | uint64(peakData[pos])
-      }
-      if pairOrder == "m/z-int" {
-        (*mz)[pos / (typesize*2)] = float64(math.Float64frombits(value))
-      } else {
-        (*intensity)[pos / (typesize*2)] = float64(math.Float64frombits(value))
-      }
-      value = 0
-      for i := 0; i < typesize; i++ {
-        pos++
-        value <<= 8
-        value |= uint64(peakData[pos])
-      }
-      if pairOrder == "m/z-int" {
-        (*intensity)[pos / (typesize*2)] = float64(math.Float64frombits(value))
-      } else {
-        (*mz)[pos / (typesize*2)] = float64(math.Float64frombits(value))
-      }
-    }
+  // now decode the peak data
+  s.MzArray = make([]float64, 0, mzs.PeakCount)
+  s.IntensityArray = make([]float64, 0, mzs.PeakCount)
+  values := make([]float64, 0, mzs.PeakCount*2)
+  _ = Float64FromBase64(&values, mzs.Peaks.PeakList, mzs.Peaks.Precision,
+                        BigEndian)
+  n := len(values)
+  for i := 0 ; i < n; i+=2 {
+    s.MzArray = append(s.MzArray, values[i])
+    s.IntensityArray = append(s.IntensityArray, values[i+1])
   }
 }
-
-
 
