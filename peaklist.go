@@ -63,6 +63,40 @@ func Base64FromFloat64(src *[]float64, precision int, byteOrder bool) string {
   return ""
 }
 
+func Float64FromBytes(dst *[]float64, src *[]byte, precision uint8,
+                      byteOrder bool) int {
+  if precision == 32 {
+    value := uint32(0)
+    for i,v := range *src {
+      if byteOrder {
+        value <<= 8
+        value |= uint32(v)
+      } else {
+        value |= uint32(v) << ((uint32(i) % 4) * 8)
+      }
+      if i % 4 == 3 {
+        *dst = append(*dst, float64(math.Float32frombits(value)))
+        value = 0
+      }
+    }
+  } else if precision == 64 {
+    value := uint64(0)
+    for i,v := range *src {
+      if byteOrder {
+        value <<= 8
+        value |= uint64(v)
+      } else {
+        value |= uint64(v) << ((uint64(i) % 8) * 8)
+      }
+      if i % 8 == 7 {
+        *dst = append(*dst, math.Float64frombits(value))
+        value = 0
+      }
+    }
+  }
+  return 0
+}
+
 func invertBytes32( value uint32 ) uint32 {
   value = ((value >> 24) & 0x000000FF) |
           ((value >>  8) & 0x0000FF00) |

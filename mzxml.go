@@ -6,6 +6,10 @@ import (
   "io"
   "strconv"
   "errors"
+  "compress/zlib"
+  "encoding/base64"
+  "strings"
+  "io/ioutil"
 )
 
 type mzxml struct {
@@ -163,12 +167,25 @@ func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
   s.MzArray = make([]float64, 0, mzs.PeakCount)
   s.IntensityArray = make([]float64, 0, mzs.PeakCount)
   values := make([]float64, 0, mzs.PeakCount*2)
-  _ = Float64FromBase64(&values, mzs.Peaks.PeakList, mzs.Peaks.Precision,
-                        BigEndian)
+  if mzs.Peaks.CompressionType == "zlib" {
+    bytes := decompressPeaks(mzs.Peaks.PeakList)
+    _ = Float64FromBytes(&values, &bytes,
+                         mzs.Peaks.Precision, BigEndian)
+  } else {
+    _ = Float64FromBytes(&values, mzs.Peaks.PeakList, mzs.Peaks.Precision,
+                          BigEndian)
+  }
   n := len(values)
   for i := 0 ; i < n; i+=2 {
     s.MzArray = append(s.MzArray, values[i])
     s.IntensityArray = append(s.IntensityArray, values[i+1])
   }
+}
+
+func decompressPeaks(peaks string) []byte {
+  zReader,_ := zlib.NewReader(
+    base64.NewDecoder(base64.StdEncoding, strings.NewReader(peaks)))
+  bytes,_ := ioutil.ReadAll(zReader)
+  return bytes
 }
 
