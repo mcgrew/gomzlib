@@ -37,13 +37,13 @@ type mzDataScan struct {
     SpectrumType string `xml:"spectrumType,attr"`
     MethodOfCombination string `xml:"methodOfCombination,attr"`
   } `xml:"spectrumDesc>acqSpecification"`
-  Precursor struct {
+  Precursor []struct {
     ParentScan uint64 `xml:"spectrumRef,attr"`
     IonSelection []cvParam `xml:"ionSelection>cvParam"`
     Activation []cvParam `xml:"activation>cvParam"`
-  } `xml:"precursor"`
-  MzArray peakArray `xml:"spectrum>mzArrayBinary>data`
-  IntensityArray peakArray `xml:"spectrum>intenArrayBinary>data`
+  } `xml:"spectrumDesc>precursorList>precursor"`
+  MzArray peakArray `xml:"mzArrayBinary>data"`
+  IntensityArray peakArray `xml:"intenArrayBinary>data"`
 }
 
 type peakArray struct {
@@ -115,19 +115,23 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
     s.Id = scan.Id
     s.MzRange[0] = scan.Instrument.MzMin
     s.MzRange[1] = scan.Instrument.MzMax
-    s.ParentScan = scan.Precursor.ParentScan
-    mass,_ := param(&scan.Precursor.IonSelection, "MassToChargeRatio")
-    s.PrecursorMz,_ = strconv.ParseFloat(mass, 64)
-    ce,_ := param(&scan.Precursor.Activation, "CollisionEnergy")
-    s.CollisionEnergy,_ = strconv.ParseFloat(ce, 64)
+    println(scan.MzArray.PeakCount)
+    println(scan.IntensityArray.PeakCount)
+    if len(scan.Precursor) > 0 {
+      s.ParentScan = scan.Precursor[0].ParentScan
+      mass,_ := param(&scan.Precursor[0].IonSelection, "MassToChargeRatio")
+      s.PrecursorMz,_ = strconv.ParseFloat(mass, 64)
+      ce,_ := param(&scan.Precursor[0].Activation, "CollisionEnergy")
+      s.CollisionEnergy,_ = strconv.ParseFloat(ce, 64)
+    }
     s.Continuous = scan.Specification.SpectrumType == "continuous"
     iso,_ := param(&mz.ProcessingMethod, "Deisotoping")
     s.DeIsotoped,_ = strconv.ParseBool(iso)
-    _ = Float64FromBase64(&s.MzArray, scan.MzArray.PeakList, 
-                          scan.MzArray.Precision, 
+    _ = Float64FromBase64(&s.MzArray, scan.MzArray.PeakList,
+                          scan.MzArray.Precision,
                           scan.MzArray.Endian == "big")
-    _ = Float64FromBase64(&s.IntensityArray, scan.IntensityArray.PeakList, 
-                          scan.IntensityArray.Precision, 
+    _ = Float64FromBase64(&s.IntensityArray, scan.IntensityArray.PeakList,
+                          scan.IntensityArray.Precision,
                           scan.IntensityArray.Endian == "big")
     r.Scans = append(r.Scans, *s)
   }
@@ -160,7 +164,6 @@ func param( params *[]cvParam, name string ) (string, error) {
       return v.Value, nil
     }
   }
-  fmt.Printf("Key '%s' Not Found\n", name ) // debug
   return "", errors.New(fmt.Sprintf("Key '%s' Not Found", name ))
 }
 

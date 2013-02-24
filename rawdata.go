@@ -82,7 +82,7 @@ func (r *RawData) Read(filename string) error {
   if strings.ToLower(filename[len(filename)-7:]) == ".mzdata" {
     return r.ReadMzData(filename)
   }
-  if strings.ToLower(filename[len(filename)-11:]) == ".mzdata.xml" {
+  if strings.ToLower(filename[len(filename)-4:]) == ".xml" {
     return r.ReadMzData(filename)
   }
   if strings.ToLower(filename[len(filename)-5:]) == ".mzml" {

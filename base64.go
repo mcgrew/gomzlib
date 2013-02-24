@@ -35,7 +35,10 @@ func Float64FromBase64 (dst *[]float64, src string,
   } else if precision == 64 {
     var value uint64 = 0
     for i :=0; i < n; i++ {
-      bits := uint64(strings.IndexAny(charSet, string(src[n])))
+      if (src[i] == uint8(61)) { // the = sign (padding)
+        break
+      }
+      bits := uint64(strings.IndexAny(charSet, string(src[i])))
       shift += 6
       if shift > precision {
         shift %= precision
@@ -44,7 +47,7 @@ func Float64FromBase64 (dst *[]float64, src string,
         if !byteOrder {
           value = invertBytes64(value)
         }
-        *dst = append(*dst, math.Float64frombits(value))
+        *dst = append(*dst, float64(math.Float64frombits(value)))
         value = bits
       } else {
         value <<= 6

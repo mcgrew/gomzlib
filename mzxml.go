@@ -47,6 +47,7 @@ type peaks struct {
   Precision uint8 `xml:"precision,attr"`
   ByteOrder string `xml:"byteOrder,attr"`
   PairOrder string `xml:"pairOrder,attr"`
+  CompressionType string `xml:"compressionType,attr"`
 }
 
 type msinstrument struct {
