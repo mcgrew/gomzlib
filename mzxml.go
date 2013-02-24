@@ -6,10 +6,7 @@ import (
   "io"
   "strconv"
   "errors"
-  "compress/zlib"
-  "encoding/base64"
-  "strings"
-  "io/ioutil"
+  "encoding/binary"
 )
 
 type mzxml struct {
@@ -36,7 +33,7 @@ type mzxmlscan struct {
   BasePeakMz float64 `xml:"basePeakMz,attr"`
   BasePeakIntensity float64 `xml:"basePeakIntensity,attr"`
   Tic float64 `xml:"totIonCurrent,attr"`
-  PeakCount int64 `xml:"peaksCount,attr"`
+  PeakCount uint64 `xml:"peaksCount,attr"`
   Polarity string `xml:"polarity,attr"`
   RetentionTime string `xml:"retentionTime,attr"`
   CollisionEnergy float64 `xml:"collisionEnergy,attr"`
@@ -78,6 +75,7 @@ func (r *RawData) ReadMzXml(filename string) error {
   if err != nil {
     return err
   }
+  defer file.Close()
   reader := io.Reader(file)
   return r.DecodeMzXml( reader )
 }
@@ -167,25 +165,14 @@ func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
   s.MzArray = make([]float64, 0, mzs.PeakCount)
   s.IntensityArray = make([]float64, 0, mzs.PeakCount)
   values := make([]float64, 0, mzs.PeakCount*2)
-  if mzs.Peaks.CompressionType == "zlib" {
-    bytes := decompressPeaks(mzs.Peaks.PeakList)
-    _ = Float64FromBytes(&values, &bytes,
-                         mzs.Peaks.Precision, BigEndian)
-  } else {
-    _ = Float64FromBytes(&values, mzs.Peaks.PeakList, mzs.Peaks.Precision,
-                          BigEndian)
-  }
+  // mzxml is always bigEndian per the spec
+  _ = Float64FromBase64(&values, mzs.Peaks.PeakList, mzs.PeakCount*2,
+                        mzs.Peaks.Precision, 
+                        mzs.Peaks.CompressionType == "zlib", binary.BigEndian)
   n := len(values)
   for i := 0 ; i < n; i+=2 {
     s.MzArray = append(s.MzArray, values[i])
     s.IntensityArray = append(s.IntensityArray, values[i+1])
   }
-}
-
-func decompressPeaks(peaks string) []byte {
-  zReader,_ := zlib.NewReader(
-    base64.NewDecoder(base64.StdEncoding, strings.NewReader(peaks)))
-  bytes,_ := ioutil.ReadAll(zReader)
-  return bytes
 }
 

@@ -8,6 +8,8 @@ import (
   "io"
   "fmt"
   "strings"
+  "bufio"
+  "encoding/binary"
 )
 
 type mzData struct {
@@ -68,10 +70,11 @@ type cvParam struct {
 // Return value:
 //   error: Indicates whether or not an error occurred while reading the file
 func (r *RawData) ReadMzData(filename string) error {
-  file,err := os.Open(filename)
+  file,err := os.OpenFile(filename, os.O_RDONLY, 0777)
   if err != nil {
     return err
   }
+  defer file.Close()
   reader := io.Reader(file)
   return r.DecodeMzData(reader)
 }
@@ -95,12 +98,12 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
   if e != nil {
     return e
   }
+
   r.SourceFile = strings.Join([]string{mz.SourcePath, mz.SourceFile}, "/")
   r.Instrument.Model = mz.InstrumentName
   r.Instrument.Manufacturer = mz.InstrumentName
   r.Instrument.MassAnalyzer,_ = param(&mz.MassAnalyzer, "AnalyzerType")
   r.ScanCount = mz.SpectrumList.ScanCount
-//  var scans []Scan
   // copy scan information
   for _,scan := range mz.SpectrumList.Scans {
     s := new(Scan)
@@ -127,12 +130,19 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
     s.Continuous = scan.Specification.SpectrumType == "continuous"
     iso,_ := param(&mz.ProcessingMethod, "Deisotoping")
     s.DeIsotoped,_ = strconv.ParseBool(iso)
+    var byteOrder binary.ByteOrder
+    if scan.MzArray.Endian == "big" {
+      byteOrder = binary.BigEndian
+    } else {
+      byteOrder = binary.LittleEndian
+    }
     _ = Float64FromBase64(&s.MzArray, scan.MzArray.PeakList,
-                          scan.MzArray.Precision,
-                          scan.MzArray.Endian == "big")
+                          scan.MzArray.PeakCount, scan.MzArray.Precision,
+                          false, byteOrder)
     _ = Float64FromBase64(&s.IntensityArray, scan.IntensityArray.PeakList,
+                          scan.IntensityArray.PeakCount,
                           scan.IntensityArray.Precision,
-                          scan.IntensityArray.Endian == "big")
+                          false, byteOrder)
     r.Scans = append(r.Scans, *s)
   }
   return nil
@@ -146,7 +156,104 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
 // Return value:
 //   error: Indicates whether or not an error occurred while writing the file
 func (r *RawData) WriteMzData( filename string ) error {
-  return errors.New("Writing this file type has not yet been implemented")
+  outFile,err := os.OpenFile(filename, os.O_WRONLY, 0770)
+  if err != nil {
+    return err;
+  }
+  defer outFile.Close()
+  out := bufio.NewWriter(outFile)
+  _,err = out.Write(([]byte)(fmt.Sprintf(
+`<?xml version="1.0" encoding="UTF-8"?>
+<mzData version="1.05" accessionNumber="psi-ms:100" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <cvLookup cdLabel="psi" fullName="The PSI Ontology" version="1.00" address="http://psidev.sourceforge.net/ontology" />
+  <description>
+    <admin>
+      <sampleName/>
+      <sampleDescription comment="" />
+      <sourceFile>\n
+        <nameOfFile />\n
+        <pathToFile />\n
+      </sourceFile>\n
+      <contact>\n
+        <name />\n
+        <institution />\n
+        <contactInfo />\n
+      </contact>\n
+    </admin>\n
+    <instrument>\n
+      <instrumentName />\n
+      <source />\n
+      <analyzerList count="1">\n
+        <analyzer>\n
+          <cvParam cvLabel="psi" accession="PSI:1000010" name="AnalyzerType" value="unknown" />\n
+        </analyzer>\n
+      </analyzerList>\n
+      <detector>\n
+          <cvParam cvLabel="psi" accession="PSI:1000026" name="DetectorType" value="unknown" />\n
+          <cvParam cvLabel="psi" accession="PSI:1000029" name="SamplingFrequency" value="unknown" />\n
+      </detector>\n
+      <additional />\n
+    </instrument>\n
+    <dataProcessing>\n
+      <software completionTime="">\n
+        <name>pymzlib, Version=%s</name>\n
+        <version>%s</version>\n
+        <comments />\n
+      </software>\n
+      <processingMethod>\n
+          <cvParam cvLabel="psi" accession="PSI:1000033" name="deisotoped" value="unknown" />\n
+          <cvParam cvLabel="psi" accession="PSI:1000034" name="chargeDeconvolved" value="unknown" />\n
+          <cvParam cvLabel="psi" accession="PSI:1000035" name="peakProcessing" value="unknown" />\n
+      </processingMethod>\n
+    </dataProcessing>\n
+  </description>\n
+  <spectrumList count="%d">`, Version, Version, len(r.Scans))))
+  if err != nil {
+    return err
+  }
+  for _,scan := range r.Scans {
+    var polarity string
+    if scan.Polarity > 0 {
+      polarity = "Positive"
+    } else {
+      polarity = "Negative"
+    }
+    var mzBase64 string
+    var intensityBase64 string
+    _,err = out.Write(([]byte)(fmt.Sprintf(`
+    <spectrum id="%d">
+        <spectrumDesc>\n
+          <spectrumSettings>\n
+            <acqSpecification spectrumType="unknown" methodOfCombination="unknown" count="1">\n
+              <acquisition number="%d" />
+            </acqSpecification>
+            <spectrumInstrument msLevel="%d" mzRangeStart="%f" mzRangeStop="%f">
+              <cvParam cvLabel="psi" accession="PSI:1000036" name="ScanMode" value="Scan" />
+              <cvParam cvLabel="psi" accession="PSI:1000037" name="Polarity" value="%s" />
+              <cvParam cvLabel="psi" accession="PSI:1000038" name="TimeInMinutes" value="%f" />
+            </spectrumInstrument>
+          </spectrumSettings>
+        </spectrumDesc>
+        <mzArrayBinary>
+          <data precision="64" endian="little" length="%d">%s</data>
+        </mzArrayBinary>
+        <intenArrayBinary>
+          <data precision="64" endian="little" length="%d">%s</data>
+        </intenArrayBinary>
+      </spectrum>`, scan.Id, scan.MsLevel, scan.MzRange[0], scan.MzRange[1],
+      polarity, scan.RetentionTime, len(scan.MzArray), mzBase64,
+      len(scan.IntensityArray), intensityBase64 )))
+    if err != nil {
+      return err
+    }
+  }
+  _,err = out.Write(([]byte)(
+`  </spectrumList>\n
+</mzData>`))
+  if err != nil {
+    return err
+  }
+  return nil
 }
 
 // Reads through a slice of cvParams to find the appropriate value

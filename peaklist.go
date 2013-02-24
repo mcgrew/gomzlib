@@ -2,124 +2,48 @@ package mzlib
 
 import( 
   "strings"
-  "math"
+  "encoding/binary"
+  "encoding/base64"
+  "compress/zlib"
 )
 
 // Converts a base64 string to an array of float64
-func Float64FromBase64 (dst *[]float64, src string, 
-                        precision uint8, byteOrder bool) int {
-  n := len(src)
-  shift := uint8(0)
-  if precision == 32 {
-    var value uint32 = 0
-    for i :=0; i < n; i++ {
-      if (src[i] == uint8(61)) { // the = sign (padding)
-        break
+//
+// Parameters:
+//   dst: The destination array.
+//   src: The base64 encoded source string.
+//   peakCount: The number of peaks present in the encoded string.
+//   precision: The number of bits in each value, either 32 or 64.
+//   compressed: Whether or not the data is compressed with zlib.
+//   byteOrder: The byte order of the data, either binary.BigEndian or
+//     binary.LittleEndian
+func Float64FromBase64 (dst *[]float64, src string, peakCount uint64,
+                        precision uint8, compressed bool,
+                        byteOrder binary.ByteOrder) int {
+    sr := strings.NewReader(src)
+    reader := base64.NewDecoder(base64.StdEncoding, sr)
+    if compressed {
+      reader,_ = zlib.NewReader(reader)
+    }
+    if precision == 32 {
+      for i :=uint64(0); i < peakCount; i++ {
+        var value float32
+        binary.Read(reader, byteOrder, &value)
+        *dst = append(*dst, float64(value))
       }
-      bits := uint32(strings.IndexAny(charSet, string(src[i])))
-      shift += 6
-      if shift > precision {
-        shift %= precision
-        value <<= (6 - shift)
-        value |= bits >> shift
-        if !byteOrder {
-          value = invertBytes32(value)
-        }
-        *dst = append(*dst, float64(math.Float32frombits(value)))
-        value = bits
-      } else {
-        value <<= 6
-        value |= bits
+    } else if precision == 64 {
+      for i := uint64(0); i < peakCount; i++ {
+        var value float64
+        binary.Read(reader, byteOrder, &value)
+        *dst = append(*dst, value)
       }
     }
-  } else if precision == 64 {
-    var value uint64 = 0
-    for i :=0; i < n; i++ {
-      if (src[i] == uint8(61)) { // the = sign (padding)
-        break
-      }
-      bits := uint64(strings.IndexAny(charSet, string(src[i])))
-      shift += 6
-      if shift > precision {
-        shift %= precision
-        value <<= (6 - shift)
-        value |= bits >> shift
-        if !byteOrder {
-          value = invertBytes64(value)
-        }
-        *dst = append(*dst, float64(math.Float64frombits(value)))
-        value = bits
-      } else {
-        value <<= 6
-        value |= bits
-      }
-    }
-  }
   return 0
 }
 
 // Converts an array of float64 to a base64 string
-func Base64FromFloat64(src *[]float64, precision int, byteOrder bool) string {
+func Base64FromFloat64(src *[]float64, precision int, 
+                       byteOrder binary.ByteOrder) string {
   return ""
 }
-
-func Float64FromBytes(dst *[]float64, src *[]byte, precision uint8,
-                      byteOrder bool) int {
-  if precision == 32 {
-    value := uint32(0)
-    for i,v := range *src {
-      if byteOrder {
-        value <<= 8
-        value |= uint32(v)
-      } else {
-        value |= uint32(v) << ((uint32(i) % 4) * 8)
-      }
-      if i % 4 == 3 {
-        *dst = append(*dst, float64(math.Float32frombits(value)))
-        value = 0
-      }
-    }
-  } else if precision == 64 {
-    value := uint64(0)
-    for i,v := range *src {
-      if byteOrder {
-        value <<= 8
-        value |= uint64(v)
-      } else {
-        value |= uint64(v) << ((uint64(i) % 8) * 8)
-      }
-      if i % 8 == 7 {
-        *dst = append(*dst, math.Float64frombits(value))
-        value = 0
-      }
-    }
-  }
-  return 0
-}
-
-func invertBytes32( value uint32 ) uint32 {
-  value = ((value >> 24) & 0x000000FF) |
-          ((value >>  8) & 0x0000FF00) |
-          ((value <<  8) & 0x00FF0000) |
-          ((value << 24) & 0xFF000000)
-  return value
-}
-
-func invertBytes64( value uint64 ) uint64 {
-  value = ((value >> 56) & 0x00000000000000FF) |
-          ((value >> 40) & 0x000000000000FF00) |
-          ((value >> 24) & 0x0000000000FF0000) |
-          ((value >>  8) & 0x00000000FF000000) |
-          ((value <<  8) & 0x000000FF00000000) |
-          ((value << 24) & 0x0000FF0000000000) |
-          ((value << 40) & 0x00FF000000000000) |
-          ((value << 56) & 0xFF00000000000000)
-  return value
-}
-
-const LittleEndian bool = false
-const BigEndian bool = true
-
-const charSet string = 
-  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
