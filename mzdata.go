@@ -164,6 +164,15 @@ func (r *RawData) WriteMzData( filename string ) error {
   }
   out := bufio.NewWriter(outFile)
   defer outFile.Close()
+  err = r.EncodeMzData(out)
+  if err != nil {
+    return err;
+  }
+  out.Flush()
+  return nil
+}
+
+func (r *RawData) EncodeMzData(writer io.Writer) error {
   deIsotoped := (len(r.Scans) > 0 && r.Scans[0].DeIsotoped)
   var sourceFileName string
   var sourceFilePath string
@@ -174,7 +183,7 @@ func (r *RawData) WriteMzData( filename string ) error {
   } else {
     sourceFileName = r.Filename
   }
-  _,err = out.Write(([]byte)(fmt.Sprintf(
+  _,err := writer.Write(([]byte)(fmt.Sprintf(
 `<?xml version="1.0" encoding="UTF-8"?>
 <mzData version="1.05" accessionNumber="psi-ms:100" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <cvLookup cdLabel="psi" fullName="The PSI Ontology" version="1.00" address="http://psidev.sourceforge.net/ontology" />
@@ -220,7 +229,7 @@ func (r *RawData) WriteMzData( filename string ) error {
   </description>
   <spectrumList count="%d">`, sourceFileName, sourceFilePath,
     r.Instrument.Model, r.Instrument.MassAnalyzer, Version, Version,
-    len(r.Scans), deIsotoped)))
+    deIsotoped, len(r.Scans))))
   if err != nil {
     return err
   }
@@ -242,7 +251,7 @@ func (r *RawData) WriteMzData( filename string ) error {
       spectrumType = "discrete"
       method = ` methodOfCombination="sum"`
     }
-    _,err = out.Write(([]byte)(fmt.Sprintf(`
+    _,err = writer.Write(([]byte)(fmt.Sprintf(`
     <spectrum id="%d">
         <spectrumDesc>
           <spectrumSettings>
@@ -261,7 +270,7 @@ func (r *RawData) WriteMzData( filename string ) error {
       return err
     }
     if scan.ParentScan != 0 {
-      _,err = out.Write(([]byte)(fmt.Sprintf(`
+      _,err = writer.Write(([]byte)(fmt.Sprintf(`
 				<precursorList count = "1">
 					<precursor msLevel="%d" spectrumRef="%d">
 						<ionSelection>
@@ -277,7 +286,7 @@ func (r *RawData) WriteMzData( filename string ) error {
         return err
       }
     }
-    _,err = out.Write(([]byte)(fmt.Sprintf(`
+    _,err = writer.Write(([]byte)(fmt.Sprintf(`
         </spectrumDesc>
         <mzArrayBinary>
           <data precision="64" endian="little" length="%d">%s</data>
@@ -291,13 +300,12 @@ func (r *RawData) WriteMzData( filename string ) error {
       return err
     }
   }
-  _,err = out.Write(([]byte)(
+  _,err = writer.Write(([]byte)(
 `  </spectrumList>
 </mzData>`))
   if err != nil {
     return err
   }
-  out.Flush()
   return nil
 }
 

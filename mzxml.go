@@ -137,6 +137,10 @@ func (r *RawData) WriteMzXml(filename string) error {
   return errors.New("Writing this file type has not yet been implemented")
 }
 
+func (r *RawData) EncodeMzXml(writer io.Writer)error {
+  return errors.New("Writing this file type has not yet been implemented")
+}
+
 // Decodes scan information read from a file
 //
 // Parameters:
