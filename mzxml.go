@@ -7,6 +7,7 @@ import (
   "strconv"
   "errors"
   "encoding/binary"
+  "path/filepath"
 )
 
 type mzxml struct {
@@ -75,6 +76,7 @@ func (r *RawData) ReadMzXml(filename string) error {
   if err != nil {
     return err
   }
+  r.Filename,_ = filepath.Abs(filename)
   defer file.Close()
   reader := io.Reader(file)
   return r.DecodeMzXml( reader )

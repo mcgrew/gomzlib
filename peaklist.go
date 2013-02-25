@@ -5,6 +5,8 @@ import(
   "encoding/binary"
   "encoding/base64"
   "compress/zlib"
+  "io/ioutil"
+  "bytes"
 )
 
 // Converts a base64 string to an array of float64
@@ -26,7 +28,7 @@ func Float64FromBase64 (dst *[]float64, src string, peakCount uint64,
       reader,_ = zlib.NewReader(reader)
     }
     if precision == 32 {
-      for i :=uint64(0); i < peakCount; i++ {
+      for i := uint64(0); i < peakCount; i++ {
         var value float32
         binary.Read(reader, byteOrder, &value)
         *dst = append(*dst, float64(value))
@@ -42,8 +44,21 @@ func Float64FromBase64 (dst *[]float64, src string, peakCount uint64,
 }
 
 // Converts an array of float64 to a base64 string
-func Base64FromFloat64(src *[]float64, precision int, 
+func Base64FromFloat64(src *[]float64, precision int,
                        byteOrder binary.ByteOrder) string {
-  return ""
+  dst := new(bytes.Buffer)
+  writer := base64.NewEncoder(base64.StdEncoding, dst)
+  if precision == 64 {
+    for _,v := range *src {
+      binary.Write(writer, byteOrder, v)
+    }
+  } else if precision == 32 {
+    for _,v := range *src {
+      binary.Write(writer, byteOrder, float32(v))
+    }
+  }
+  writer.Close()
+  result,_ := ioutil.ReadAll(dst)
+  return string(result)
 }
 

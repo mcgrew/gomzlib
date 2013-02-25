@@ -8,11 +8,12 @@ import (
 
 const (
 // The mzlib version.
-  Version string = "0.1"
+  Version string = "0.1.2012.02.24"
 )
 
 // Represents the raw data from a mass spectrometry file.
 type RawData struct {
+  Filename string
   SourceFile string
   Instrument Instrument
   ScanCount uint64

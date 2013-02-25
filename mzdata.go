@@ -10,6 +10,7 @@ import (
   "strings"
   "bufio"
   "encoding/binary"
+  "path/filepath"
 )
 
 type mzData struct {
@@ -74,6 +75,7 @@ func (r *RawData) ReadMzData(filename string) error {
   if err != nil {
     return err
   }
+  r.Filename,_ = filepath.Abs(filename)
   defer file.Close()
   reader := io.Reader(file)
   return r.DecodeMzData(reader)
@@ -118,8 +120,6 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
     s.Id = scan.Id
     s.MzRange[0] = scan.Instrument.MzMin
     s.MzRange[1] = scan.Instrument.MzMax
-    println(scan.MzArray.PeakCount)
-    println(scan.IntensityArray.PeakCount)
     if len(scan.Precursor) > 0 {
       s.ParentScan = scan.Precursor[0].ParentScan
       mass,_ := param(&scan.Precursor[0].IonSelection, "MassToChargeRatio")
@@ -156,12 +156,24 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
 // Return value:
 //   error: Indicates whether or not an error occurred while writing the file
 func (r *RawData) WriteMzData( filename string ) error {
-  outFile,err := os.OpenFile(filename, os.O_WRONLY, 0770)
+  outFile,err := os.OpenFile(filename,
+                             os.O_WRONLY | os.O_CREATE | os.O_TRUNC,
+                             0770)
   if err != nil {
     return err;
   }
-  defer outFile.Close()
   out := bufio.NewWriter(outFile)
+  defer outFile.Close()
+  deIsotoped := (len(r.Scans) > 0 && r.Scans[0].DeIsotoped)
+  var sourceFileName string
+  var sourceFilePath string
+  pathIndex := strings.LastIndex(r.Filename, "/")
+  if pathIndex >= 0 {
+    sourceFileName = r.Filename[pathIndex+1:]
+    sourceFilePath = r.Filename[:pathIndex]
+  } else {
+    sourceFileName = r.Filename
+  }
   _,err = out.Write(([]byte)(fmt.Sprintf(
 `<?xml version="1.0" encoding="UTF-8"?>
 <mzData version="1.05" accessionNumber="psi-ms:100" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
@@ -170,61 +182,71 @@ func (r *RawData) WriteMzData( filename string ) error {
     <admin>
       <sampleName/>
       <sampleDescription comment="" />
-      <sourceFile>\n
-        <nameOfFile />\n
-        <pathToFile />\n
-      </sourceFile>\n
-      <contact>\n
-        <name />\n
-        <institution />\n
-        <contactInfo />\n
-      </contact>\n
-    </admin>\n
-    <instrument>\n
-      <instrumentName />\n
-      <source />\n
-      <analyzerList count="1">\n
-        <analyzer>\n
-          <cvParam cvLabel="psi" accession="PSI:1000010" name="AnalyzerType" value="unknown" />\n
-        </analyzer>\n
-      </analyzerList>\n
-      <detector>\n
-          <cvParam cvLabel="psi" accession="PSI:1000026" name="DetectorType" value="unknown" />\n
-          <cvParam cvLabel="psi" accession="PSI:1000029" name="SamplingFrequency" value="unknown" />\n
-      </detector>\n
-      <additional />\n
-    </instrument>\n
-    <dataProcessing>\n
-      <software completionTime="">\n
-        <name>pymzlib, Version=%s</name>\n
-        <version>%s</version>\n
-        <comments />\n
-      </software>\n
-      <processingMethod>\n
-          <cvParam cvLabel="psi" accession="PSI:1000033" name="deisotoped" value="unknown" />\n
-          <cvParam cvLabel="psi" accession="PSI:1000034" name="chargeDeconvolved" value="unknown" />\n
-          <cvParam cvLabel="psi" accession="PSI:1000035" name="peakProcessing" value="unknown" />\n
-      </processingMethod>\n
-    </dataProcessing>\n
-  </description>\n
-  <spectrumList count="%d">`, Version, Version, len(r.Scans))))
+      <sourceFile>
+        <nameOfFile>%s</nameOfFile>
+        <pathToFile>%s</pathToFile>
+      </sourceFile>
+      <contact>
+        <name />
+        <institution />
+        <contactInfo />
+      </contact>
+    </admin>
+    <instrument>
+      <instrumentName>%s</instrumentName>
+      <source />
+      <analyzerList count="1">
+        <analyzer>
+          <cvParam cvLabel="psi" accession="PSI:1000010" name="AnalyzerType" value="%s" />
+        </analyzer>
+      </analyzerList>
+      <detector>
+          <cvParam cvLabel="psi" accession="PSI:1000026" name="DetectorType" value="unknown" />
+          <cvParam cvLabel="psi" accession="PSI:1000029" name="SamplingFrequency" value="unknown" />
+      </detector>
+    </instrument>
+    <dataProcessing>
+      <software>
+        <name>gomzlib, Version=%s</name>
+        <version>%s</version>
+        <comments />
+      </software>
+      <processingMethod>
+          <cvParam cvLabel="psi" accession="PSI:1000033" name="deisotoped" value="%t" />
+          <cvParam cvLabel="psi" accession="PSI:1000034" name="chargeDeconvolved" value="unknown" />
+          <cvParam cvLabel="psi" accession="PSI:1000035" name="peakProcessing" value="unknown" />
+      </processingMethod>
+    </dataProcessing>
+  </description>
+  <spectrumList count="%d">`, sourceFileName, sourceFilePath,
+    r.Instrument.Model, r.Instrument.MassAnalyzer, Version, Version,
+    len(r.Scans), deIsotoped)))
   if err != nil {
     return err
   }
   for _,scan := range r.Scans {
     var polarity string
     if scan.Polarity > 0 {
-      polarity = "Positive"
+      polarity = "positive"
     } else {
-      polarity = "Negative"
+      polarity = "negative"
     }
-    var mzBase64 string
-    var intensityBase64 string
+    mzBase64 := Base64FromFloat64(&scan.MzArray, 64, binary.LittleEndian)
+    intensityBase64 := Base64FromFloat64(&scan.IntensityArray, 64,
+                                         binary.LittleEndian)
+    var spectrumType string
+    method := ""
+    if scan.Continuous {
+      spectrumType = "continuous"
+    } else {
+      spectrumType = "discrete"
+      method = ` methodOfCombination="sum"`
+    }
     _,err = out.Write(([]byte)(fmt.Sprintf(`
     <spectrum id="%d">
-        <spectrumDesc>\n
-          <spectrumSettings>\n
-            <acqSpecification spectrumType="unknown" methodOfCombination="unknown" count="1">\n
+        <spectrumDesc>
+          <spectrumSettings>
+            <acqSpecification spectrumType="%s"%s count="1">
               <acquisition number="%d" />
             </acqSpecification>
             <spectrumInstrument msLevel="%d" mzRangeStart="%f" mzRangeStop="%f">
@@ -232,7 +254,30 @@ func (r *RawData) WriteMzData( filename string ) error {
               <cvParam cvLabel="psi" accession="PSI:1000037" name="Polarity" value="%s" />
               <cvParam cvLabel="psi" accession="PSI:1000038" name="TimeInMinutes" value="%f" />
             </spectrumInstrument>
-          </spectrumSettings>
+          </spectrumSettings>`, scan.Id, spectrumType, method, scan.Id,
+            scan.MsLevel, scan.MzRange[0], scan.MzRange[1], polarity,
+            scan.RetentionTime)))
+    if err != nil {
+      return err
+    }
+    if scan.ParentScan != 0 {
+      _,err = out.Write(([]byte)(fmt.Sprintf(`
+				<precursorList count = "1">
+					<precursor msLevel="%d" spectrumRef="%d">
+						<ionSelection>
+							<cvParam cvLabel="psi" accession="PSI:1000040" name="MassToChargeRatio" value="%f"/>
+						</ionSelection>
+						<activation>
+							<cvParam cvLabel="psi" accession="PSI:1000045" name="CollisionEnergy" value="%f"/>
+						</activation>
+					</precursor>
+				</precursorList>`, scan.MsLevel - 1, scan.ParentScan, scan.PrecursorMz,
+          scan.CollisionEnergy)))
+      if err != nil {
+        return err
+      }
+    }
+    _,err = out.Write(([]byte)(fmt.Sprintf(`
         </spectrumDesc>
         <mzArrayBinary>
           <data precision="64" endian="little" length="%d">%s</data>
@@ -240,19 +285,19 @@ func (r *RawData) WriteMzData( filename string ) error {
         <intenArrayBinary>
           <data precision="64" endian="little" length="%d">%s</data>
         </intenArrayBinary>
-      </spectrum>`, scan.Id, scan.MsLevel, scan.MzRange[0], scan.MzRange[1],
-      polarity, scan.RetentionTime, len(scan.MzArray), mzBase64,
-      len(scan.IntensityArray), intensityBase64 )))
+      </spectrum>`, len(scan.MzArray), mzBase64, len(scan.IntensityArray),
+        intensityBase64 )))
     if err != nil {
       return err
     }
   }
   _,err = out.Write(([]byte)(
-`  </spectrumList>\n
+`  </spectrumList>
 </mzData>`))
   if err != nil {
     return err
   }
+  out.Flush()
   return nil
 }
 
