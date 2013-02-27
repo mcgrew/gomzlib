@@ -9,7 +9,7 @@ import (
 
 const (
 // The mzlib version.
-  Version string = "0.1.2012.02.24"
+  Version string = "0.1.2012.02.27"
 )
 
 // Represents the raw data from a mass spectrometry file.
@@ -30,23 +30,6 @@ type Instrument struct {
   Resolution float64
   Accuracy float64
   Ionization string
-}
-
-// Represents a single scan in the mass spectrometry data.
-type Scan struct {
-  RetentionTime float64
-  Polarity int8
-  MsLevel uint8
-  Id uint64
-  MzRange [2]float64
-  ParentScan uint64
-  PrecursorMz float64
-  PrecursorIntensity float64
-  CollisionEnergy float64
-  Continuous bool
-  DeIsotoped bool
-  MzArray []float64
-  IntensityArray []float64
 }
 
 // Retreives the scan closest to the specified retention time
@@ -75,7 +58,7 @@ func (r *RawData) GetScan(retentionTime float64) *Scan {
 //   maxTime: The maximum retention time value in minutes to discard (exclusive)
 //
 // Return value:
-//   uint64: The number of scans which were removed
+//   uint64: The number of scans removed
 func (r *RawData) RemoveScans(minTime float64, maxTime float64) uint64 {
   var newScans []Scan
   removed := uint64(0)
@@ -97,6 +80,9 @@ func (r *RawData) RemoveScans(minTime float64, maxTime float64) uint64 {
 // Parameters:
 //   minTime: The minimum retention time value in minutes to retain (inclusive).
 //   maxTime: The maximum retention time value in minutes to retain (exclusive).
+//
+// Return value:
+//   uint64: The number of scans removed
 func (r *RawData) OnlyScans(minTime float64, maxTime float64) uint64{
   var newScans []Scan
   removed := uint64(0)
@@ -116,19 +102,37 @@ func (r *RawData) OnlyScans(minTime float64, maxTime float64) uint64{
 // Removes any peaks inside the given range.
 //
 // Parameters:
-//   mz: The m/z value to use for selecting peaks to keep.
-//   tolerance: The tolerance value to use for selecting peaks. Peaks where
-//     abs(mz - value) < tolerance will be discarded.
-func (r *RawData) RemoveMz(mz float64, tolerance float64) {
+//   minMz: The minimum m/z value to be removed
+//   maxMz: The maximum m/z value to be removed
+//
+// Return value:
+//   uint64 The number of peaks removed
+func (r *RawData) RemoveMz(minMz float64, maxMz float64) uint64 {
+  removed := uint64(0)
+  for _,s := range r.Scans {
+    if s.MsLevel == 1 {
+      removed += s.RemoveMz(minMz, maxMz)
+    }
+  }
+  return removed
 }
 
 // Removes any peaks outside the given range.
 //
 // Parameters:
-//   mz: The m/z value to use for selecting peaks to keep.
-//   tolerance: The tolerance value to use for selecting peaks. Peaks where
-//     abs(mz - value) < tolerance will be kept.
-func (r *RawData) OnlyMz(mz float64, tolerance float64) {
+//   minMz: The minimum m/z value to be retained
+//   maxMz: The maximum m/z value to be retained
+//
+// Return value:
+//   uint64 The number of peaks removed
+func (r *RawData) OnlyMz(minMz float64, maxMz float64) uint64 {
+  removed := uint64(0)
+  for _,s := range r.Scans {
+    if s.MsLevel == 1 {
+      removed += s.OnlyMz(minMz, maxMz)
+    }
+  }
+  return removed
 }
 
 // Returns a selected ion chromatogram for the data.
@@ -148,7 +152,7 @@ func (r *RawData) Sic(minMz float64, maxMz float64) []float64 {
       sum = 0.0
       for i,v := range s.IntensityArray {
         if s.MzArray[i] > minMz && s.MzArray[i] > maxMz {
-          sum += v 
+          sum += v
         }
       }
       returnvalue = append(returnvalue, sum)
@@ -168,7 +172,7 @@ func (r *RawData) Tic() []float64 {
     if s.MsLevel == 1 {
       sum = 0.0
       for _,v := range s.IntensityArray {
-        sum += v 
+        sum += v
       }
       returnvalue = append(returnvalue, sum)
     }
@@ -252,74 +256,37 @@ func (r *RawData) PeakIntensity () float64 {
 // Return value:
 //   error: Indicates whether or not an error occurred while reading the file
 func (r *RawData) Read(filename string) error {
-  if strings.ToLower(filename[len(filename)-6:]) == ".mzxml" {
+  flen := len(filename)
+  if flen >= 6 && strings.ToLower(filename[flen-6:]) == ".mzxml" {
     return r.ReadMzXml(filename)
   }
-  if strings.ToLower(filename[len(filename)-7:]) == ".mzdata" {
+  if flen >= 7 && strings.ToLower(filename[flen-7:]) == ".mzdata" {
     return r.ReadMzData(filename)
   }
-  if strings.ToLower(filename[len(filename)-4:]) == ".xml" {
+  if flen >= 4 && strings.ToLower(filename[flen-4:]) == ".xml" {
     return r.ReadMzData(filename)
   }
-  if strings.ToLower(filename[len(filename)-5:]) == ".mzml" {
+  if flen >= 5 && strings.ToLower(filename[flen-5:]) == ".mzml" {
     return r.ReadMzMl(filename)
   }
-  return errors.New(fmt.Sprintf("Filetype '%s' not recognized", 
-                                filename[strings.LastIndex(filename,"."):]))
+  return errors.New(fmt.Sprintf("Filetype for '%s' not recognized", filename))
 }
 
 // Writes mass spectrometry data to the specified file. The format is auto-
 //   detected base on the file name.
 func (r *RawData) Write(filename string) error {
-  if strings.ToLower(filename[len(filename)-6:]) == ".mzxml" {
+  flen := len(filename)
+  if flen >= 6 && strings.ToLower(filename[flen-6:]) == ".mzxml" {
     return r.WriteMzXml(filename)
   }
-  if strings.ToLower(filename[len(filename)-7:]) == ".mzdata" {
+  if flen >= 7 && strings.ToLower(filename[flen-7:]) == ".mzdata" {
     return r.WriteMzData(filename)
   }
-  if strings.ToLower(filename[len(filename)-4:]) == ".xml" {
+  if flen >= 4 && strings.ToLower(filename[flen-4:]) == ".xml" {
     return r.WriteMzData(filename)
   }
-  if strings.ToLower(filename[len(filename)-5:]) == ".mzml" {
+  if flen >= 5 && strings.ToLower(filename[flen-5:]) == ".mzml" {
     return r.WriteMzMl(filename)
   }
-  return errors.New(fmt.Sprintf("Filetype '%s' not recognized", 
-                                filename[strings.LastIndex(filename,"."):]))
+  return errors.New(fmt.Sprintf("File type for '%s' not recognized", filename))
 }
-
-func (s *Scan) MinMz() float64 {
-  returnvalue := math.MaxFloat64
-  for _,v := range s.MzArray {
-    if v < returnvalue {
-      returnvalue = v
-    }
-  }
-  return returnvalue
-}
-
-func (s *Scan) MaxMz() float64 {
-  returnvalue := float64(-1.0)
-  for _,v := range s.MzArray {
-    if v > returnvalue {
-      returnvalue = v
-    }
-  }
-  return returnvalue
-}
-
-func (s *Scan) PeakIntensity() float64 {
-  returnvalue := float64(-1.0)
-  for _,v := range s.IntensityArray {
-    if v > returnvalue {
-      returnvalue = v
-    }
-  }
-  return returnvalue
-}
-
-func (s *Scan) RemoveMz(minMz float64, maxMz float64) {
-}
-
-func (s *Scan) OnlyMz(minMz float64, maxMz float64) {
-}
-
