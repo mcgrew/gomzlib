@@ -2,6 +2,7 @@ package mzlib
 
 import (
   "math"
+  "fmt"
 )
 
 // Represents a single scan in the mass spectrometry data.
