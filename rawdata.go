@@ -32,6 +32,24 @@ type Instrument struct {
   Ionization string
 }
 
+func (r *RawData) Clone() RawData {
+    cpy := RawData {}
+    cpy.Filename   = r.Filename
+    cpy.SourceFile = r.SourceFile
+    cpy.ScanCount  = r.ScanCount
+    cpy.Instrument.Manufacturer = r.Instrument.Manufacturer
+    cpy.Instrument.Model        = r.Instrument.Model
+    cpy.Instrument.MassAnalyzer = r.Instrument.MassAnalyzer
+    cpy.Instrument.Detector     = r.Instrument.Detector
+    cpy.Instrument.Resolution   = r.Instrument.Resolution
+    cpy.Instrument.Accuracy     = r.Instrument.Accuracy
+    cpy.Instrument.Ionization   = r.Instrument.Ionization
+    for _,s := range r.Scans {
+      cpy.Scans = append(cpy.Scans, s.Clone())
+    }
+    return cpy
+}
+
 // Retreives the scan closest to the specified retention time
 //
 // Paramters:
@@ -150,9 +168,9 @@ func (r *RawData) Sic(minMz float64, maxMz float64) []float64 {
   for _,s := range r.Scans {
     if s.MsLevel == 1 {
       sum = 0.0
-      for i,v := range s.IntensityArray {
-        if s.MzArray[i] > minMz && s.MzArray[i] > maxMz {
-          sum += v
+      for i,v := range s.MzArray {
+        if v > minMz && v < maxMz {
+          sum += s.IntensityArray[i]
         }
       }
       returnvalue = append(returnvalue, sum)

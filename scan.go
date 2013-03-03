@@ -22,6 +22,30 @@ type Scan struct {
   IntensityArray []float64
 }
 
+func (s *Scan) Clone() Scan {
+  cpy := Scan {}
+  cpy.RetentionTime      = s.RetentionTime
+  cpy.Polarity           = s.Polarity
+  cpy.MsLevel            = s.MsLevel
+  cpy.Id                 = s.Id
+  cpy.MzRange            = s.MzRange
+  cpy.ParentScan         = s.ParentScan
+  cpy.PrecursorMz        = s.PrecursorMz
+  cpy.PrecursorIntensity = s.PrecursorIntensity
+  cpy.CollisionEnergy    = s.CollisionEnergy
+  cpy.Continuous          = s.Continuous
+  cpy.DeIsotoped         = s.DeIsotoped
+  cpy.MzArray            = make([]float64, 0, len(s.MzArray))
+  cpy.IntensityArray     = make([]float64, 0, len(s.IntensityArray))
+  for _,v := range s.MzArray {
+    cpy.MzArray = append(cpy.MzArray, v)
+  }
+  for _,v := range s.IntensityArray {
+    cpy.IntensityArray = append(cpy.IntensityArray, v)
+  }
+  return cpy
+}
+
 // Returns the minimum m/z value in the scan
 //
 // Return value:
