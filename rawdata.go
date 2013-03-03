@@ -9,7 +9,7 @@ import (
 
 const (
 // The mzlib version.
-  Version string = "0.1.2012.02.27"
+  Version string = "0.2"
 )
 
 // Represents the raw data from a mass spectrometry file.
@@ -45,7 +45,7 @@ func (r *RawData) Clone() RawData {
     cpy.Instrument.Accuracy     = r.Instrument.Accuracy
     cpy.Instrument.Ionization   = r.Instrument.Ionization
     for _,s := range r.Scans {
-      cpy.Scans = append(cpy.Scans, s.Clone())
+      cpy.Scans = append(cpy.Scans, *s.Clone())
     }
     return cpy
 }

@@ -110,12 +110,12 @@ func (r *RawData) DecodeMzXml(reader io.Reader) error {
   var chans []chan *Scan
   for i:=0; i < len(mz.Run.Scans); i++ {
     c := make(chan *Scan)
-    go scanInfo(&(mz.Run.Scans[i]), 0, c)
+    go mz.Run.Scans[i].scanInfo(0, c)
     chans = append(chans, c)
     if len(mz.Run.Scans[i].Scans) > 0 {
       for j:=0; j < len(mz.Run.Scans[i].Scans); j++ {
         c = make(chan *Scan)
-        go scanInfo(&(mz.Run.Scans[i].Scans[j]), mz.Run.Scans[i].Id, c)
+        go mz.Run.Scans[i].Scans[j].scanInfo(mz.Run.Scans[i].Id, c)
         chans = append(chans, c)
       }
     }
@@ -147,37 +147,36 @@ func (r *RawData) EncodeMzXml(writer io.Writer)error {
 //
 // Parameters:
 //   s: A pointer to the Scan struct to save the decoded data to
-//   mzs: A pointer to the mzxmlscan object to read the data from
 //   parentScan: The Id of the parent scan, or 0 if none
-func scanInfo(mzs *mzxmlscan, parentScan uint64, c chan *Scan) {
+func (m *mzxmlscan) scanInfo(parentScan uint64, c chan *Scan) {
   s := new(Scan)
-  rt := mzs.RetentionTime
+  rt := m.RetentionTime
   s.RetentionTime,_ = strconv.ParseFloat(rt[2:len(rt)-1], 64)
   s.RetentionTime /= 60
-  if mzs.Polarity == "-" {
+  if m.Polarity == "-" {
     s.Polarity = -1
-  } else if mzs.Polarity == "+" {
+  } else if m.Polarity == "+" {
     s.Polarity = 1
   } else {
     s.Polarity = 0 // unknown
   }
-  s.MsLevel = mzs.MsLevel
-  s.Id = mzs.Id
-  s.MzRange[0] = mzs.LowMz
-  s.MzRange[1] = mzs.HighMz
+  s.MsLevel = m.MsLevel
+  s.Id = m.Id
+  s.MzRange[0] = m.LowMz
+  s.MzRange[1] = m.HighMz
   s.ParentScan = parentScan
-  s.PrecursorMz = mzs.Precursor.Mz
-  s.PrecursorIntensity = mzs.Precursor.Intensity
-  s.CollisionEnergy = mzs.CollisionEnergy
+  s.PrecursorMz = m.Precursor.Mz
+  s.PrecursorIntensity = m.Precursor.Intensity
+  s.CollisionEnergy = m.CollisionEnergy
 
   // now decode the peak data
-  s.MzArray = make([]float64, 0, mzs.PeakCount)
-  s.IntensityArray = make([]float64, 0, mzs.PeakCount)
-  values := make([]float64, 0, mzs.PeakCount*2)
+  s.MzArray = make([]float64, 0, m.PeakCount)
+  s.IntensityArray = make([]float64, 0, m.PeakCount)
+  values := make([]float64, 0, m.PeakCount*2)
   // mzxml is always bigEndian per the spec
-  _ = Float64FromBase64(&values, mzs.Peaks.PeakList, mzs.PeakCount*2,
-                        mzs.Peaks.Precision, 
-                        mzs.Peaks.CompressionType == "zlib", binary.BigEndian)
+  _ = Float64FromBase64(&values, m.Peaks.PeakList, m.PeakCount*2,
+                        m.Peaks.Precision, 
+                        m.Peaks.CompressionType == "zlib", binary.BigEndian)
   n := len(values)
   for i := 0 ; i < n; i+=2 {
     s.MzArray = append(s.MzArray, values[i])

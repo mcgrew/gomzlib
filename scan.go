@@ -22,8 +22,8 @@ type Scan struct {
   IntensityArray []float64
 }
 
-func (s *Scan) Clone() Scan {
-  cpy := Scan {}
+func (s *Scan) Clone() *Scan {
+  cpy := new(Scan)
   cpy.RetentionTime      = s.RetentionTime
   cpy.Polarity           = s.Polarity
   cpy.MsLevel            = s.MsLevel
@@ -33,7 +33,7 @@ func (s *Scan) Clone() Scan {
   cpy.PrecursorMz        = s.PrecursorMz
   cpy.PrecursorIntensity = s.PrecursorIntensity
   cpy.CollisionEnergy    = s.CollisionEnergy
-  cpy.Continuous          = s.Continuous
+  cpy.Continuous         = s.Continuous
   cpy.DeIsotoped         = s.DeIsotoped
   cpy.MzArray            = make([]float64, 0, len(s.MzArray))
   cpy.IntensityArray     = make([]float64, 0, len(s.IntensityArray))

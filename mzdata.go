@@ -110,20 +110,26 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
   var chans []chan *Scan
   for i := range mz.SpectrumList.Scans {
     c := make(chan *Scan)
-    go r.getScanInfo(&mz.SpectrumList.Scans[i], c)
+    go mz.SpectrumList.Scans[i].scanInfo(c)
     chans = append(chans, c)
   }
   // wait for everything to finish
   for _,c := range chans {
     s := <-c
     iso,_ := param(&mz.ProcessingMethod, "Deisotoping")
+    // sanity check
+    if len(s.MzArray) != len(s.IntensityArray) {
+      panic(fmt.Sprintf(
+            "Lengths of Intensity and MZ do not match! Scan %d, %d vs %d",
+            s.Id, len(s.IntensityArray), len(s.MzArray)))
+    }
     s.DeIsotoped,_ = strconv.ParseBool(iso)
     r.Scans = append(r.Scans, *s)
   }
   return nil
 }
 
-func (r *RawData) getScanInfo(scan *mzDataScan, c chan *Scan) {
+func (scan *mzDataScan) scanInfo(c chan *Scan) {
   s := new(Scan)
   rt,_ := param(&scan.Instrument.Params, "TimeInMinutes")
   s.RetentionTime,_ = strconv.ParseFloat(rt, 64)
