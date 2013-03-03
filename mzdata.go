@@ -11,7 +11,6 @@ import (
   "bufio"
   "encoding/binary"
   "path/filepath"
-  "runtime"
 )
 
 type mzData struct {
@@ -108,68 +107,57 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
   r.Instrument.MassAnalyzer,_ = param(&mz.MassAnalyzer, "AnalyzerType")
   r.ScanCount = mz.SpectrumList.ScanCount
   // copy scan information
-  scansPerProcess := uint64(len(mz.SpectrumList.Scans) / (runtime.NumCPU() * 4))
-  r.Scans = make([]Scan, len(mz.SpectrumList.Scans), len(mz.SpectrumList.Scans))
-  var chans []chan int
-  for i,l := uint64(0), uint64(len(mz.SpectrumList.Scans));
-                                    i < l; i += scansPerProcess {
-    stop := i + scansPerProcess
-    if stop > l {
-      stop = l
-    }
-    c := make(chan int)
+  var chans []chan *Scan
+  for i := range mz.SpectrumList.Scans {
+    c := make(chan *Scan)
+    go r.getScanInfo(&mz.SpectrumList.Scans[i], c)
     chans = append(chans, c)
-    go r.getScanInfo(&mz, i, stop, c)
   }
   // wait for everything to finish
   for _,c := range chans {
-    <-c
+    s := <-c
+    iso,_ := param(&mz.ProcessingMethod, "Deisotoping")
+    s.DeIsotoped,_ = strconv.ParseBool(iso)
+    r.Scans = append(r.Scans, *s)
   }
   return nil
 }
 
-func (r *RawData) getScanInfo(mzdata *mzData, start, stop uint64,
-                              done chan int) {
-  for i := start; i < stop; i++ {
-    scan := &mzdata.SpectrumList.Scans[i]
-    s := new(Scan)
-    rt,_ := param(&scan.Instrument.Params, "TimeInMinutes")
-    s.RetentionTime,_ = strconv.ParseFloat(rt, 64)
-    if p,_ := param(&scan.Instrument.Params, "Polarity"); p == "positive" {
-      s.Polarity = 1
-    } else {
-      s.Polarity = -1
-    }
-    s.MsLevel = scan.Instrument.MsLevel
-    s.Id = scan.Id
-    s.MzRange[0] = scan.Instrument.MzMin
-    s.MzRange[1] = scan.Instrument.MzMax
-    if len(scan.Precursor) > 0 {
-      s.ParentScan = scan.Precursor[0].ParentScan
-      mass,_ := param(&scan.Precursor[0].IonSelection, "MassToChargeRatio")
-      s.PrecursorMz,_ = strconv.ParseFloat(mass, 64)
-      ce,_ := param(&scan.Precursor[0].Activation, "CollisionEnergy")
-      s.CollisionEnergy,_ = strconv.ParseFloat(ce, 64)
-    }
-    s.Continuous = scan.Specification.SpectrumType == "continuous"
-    iso,_ := param(&mzdata.ProcessingMethod, "Deisotoping")
-    s.DeIsotoped,_ = strconv.ParseBool(iso)
-    var byteOrder binary.ByteOrder
-    if scan.MzArray.Endian == "big" {
-      byteOrder = binary.BigEndian
-    } else {
-      byteOrder = binary.LittleEndian
-    }
-    _ = Float64FromBase64(&s.MzArray, scan.MzArray.PeakList,
-                          scan.MzArray.PeakCount, scan.MzArray.Precision,
-                          false, byteOrder)
-    _ = Float64FromBase64(&s.IntensityArray, scan.IntensityArray.PeakList,
-                          scan.IntensityArray.PeakCount,
-                          scan.IntensityArray.Precision,
-                          false, byteOrder)
-    r.Scans[i] = *s
+func (r *RawData) getScanInfo(scan *mzDataScan, c chan *Scan) {
+  s := new(Scan)
+  rt,_ := param(&scan.Instrument.Params, "TimeInMinutes")
+  s.RetentionTime,_ = strconv.ParseFloat(rt, 64)
+  if p,_ := param(&scan.Instrument.Params, "Polarity"); p == "positive" {
+    s.Polarity = 1
+  } else {
+    s.Polarity = -1
   }
-  done <- 1
+  s.MsLevel = scan.Instrument.MsLevel
+  s.Id = scan.Id
+  s.MzRange[0] = scan.Instrument.MzMin
+  s.MzRange[1] = scan.Instrument.MzMax
+  if len(scan.Precursor) > 0 {
+    s.ParentScan = scan.Precursor[0].ParentScan
+    mass,_ := param(&scan.Precursor[0].IonSelection, "MassToChargeRatio")
+    s.PrecursorMz,_ = strconv.ParseFloat(mass, 64)
+    ce,_ := param(&scan.Precursor[0].Activation, "CollisionEnergy")
+    s.CollisionEnergy,_ = strconv.ParseFloat(ce, 64)
+  }
+  s.Continuous = scan.Specification.SpectrumType == "continuous"
+  var byteOrder binary.ByteOrder
+  if scan.MzArray.Endian == "big" {
+    byteOrder = binary.BigEndian
+  } else {
+    byteOrder = binary.LittleEndian
+  }
+  _ = Float64FromBase64(&s.MzArray, scan.MzArray.PeakList,
+                        scan.MzArray.PeakCount, scan.MzArray.Precision,
+                        false, byteOrder)
+  _ = Float64FromBase64(&s.IntensityArray, scan.IntensityArray.PeakList,
+                        scan.IntensityArray.PeakCount,
+                        scan.IntensityArray.Precision,
+                        false, byteOrder)
+  c <- s
 }
 
 // Writes the data to disk in MzData format
