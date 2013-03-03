@@ -11,6 +11,7 @@ import (
   "bufio"
   "encoding/binary"
   "path/filepath"
+  "runtime"
 )
 
 type mzData struct {
@@ -107,7 +108,30 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
   r.Instrument.MassAnalyzer,_ = param(&mz.MassAnalyzer, "AnalyzerType")
   r.ScanCount = mz.SpectrumList.ScanCount
   // copy scan information
-  for _,scan := range mz.SpectrumList.Scans {
+  scansPerProcess := uint64(len(mz.SpectrumList.Scans) / (runtime.NumCPU() * 4))
+  r.Scans = make([]Scan, len(mz.SpectrumList.Scans), len(mz.SpectrumList.Scans))
+  var chans []chan int
+  for i,l := uint64(0), uint64(len(mz.SpectrumList.Scans));
+                                    i < l; i += scansPerProcess {
+    stop := i + scansPerProcess
+    if stop > l {
+      stop = l
+    }
+    c := make(chan int)
+    chans = append(chans, c)
+    go r.getScanInfo(&mz, i, stop, c)
+  }
+  // wait for everything to finish
+  for _,c := range chans {
+    <-c
+  }
+  return nil
+}
+
+func (r *RawData) getScanInfo(mzdata *mzData, start, stop uint64,
+                              done chan int) {
+  for i := start; i < stop; i++ {
+    scan := &mzdata.SpectrumList.Scans[i]
     s := new(Scan)
     rt,_ := param(&scan.Instrument.Params, "TimeInMinutes")
     s.RetentionTime,_ = strconv.ParseFloat(rt, 64)
@@ -128,7 +152,7 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
       s.CollisionEnergy,_ = strconv.ParseFloat(ce, 64)
     }
     s.Continuous = scan.Specification.SpectrumType == "continuous"
-    iso,_ := param(&mz.ProcessingMethod, "Deisotoping")
+    iso,_ := param(&mzdata.ProcessingMethod, "Deisotoping")
     s.DeIsotoped,_ = strconv.ParseBool(iso)
     var byteOrder binary.ByteOrder
     if scan.MzArray.Endian == "big" {
@@ -143,9 +167,9 @@ func (r *RawData) DecodeMzData(reader io.Reader) error {
                           scan.IntensityArray.PeakCount,
                           scan.IntensityArray.Precision,
                           false, byteOrder)
-    r.Scans = append(r.Scans, *s)
+    r.Scans[i] = *s
   }
-  return nil
+  done <- 1
 }
 
 // Writes the data to disk in MzData format
