@@ -106,22 +106,24 @@ func (r *RawData) DecodeMzXml(reader io.Reader) error {
   r.Instrument.Manufacturer = mz.Run.Instrument.Manufacturer.Name
   r.Instrument.MassAnalyzer = mz.Run.Instrument.MassAnalyzer.Name
   r.ScanCount = mz.Run.ScanCount
-  var scans []Scan
   // copy scan information
+  var chans []chan *Scan
   for i:=0; i < len(mz.Run.Scans); i++ {
-    s := new(Scan)
-    s.Continuous = mz.Run.Processing.Centroided == 0
-    scanInfo(s, &(mz.Run.Scans[i]), 0)
-    scans = append(scans, *s)
+    c := make(chan *Scan)
+    go scanInfo(&(mz.Run.Scans[i]), 0, c)
+    chans = append(chans, c)
     if len(mz.Run.Scans[i].Scans) > 0 {
       for j:=0; j < len(mz.Run.Scans[i].Scans); j++ {
-        s := new(Scan)
-        s.Continuous = mz.Run.Processing.Centroided == 0
-        scanInfo(s, &(mz.Run.Scans[i].Scans[j]), mz.Run.Scans[i].Id)
-        scans = append(scans, *s)
+        c = make(chan *Scan)
+        go scanInfo(&(mz.Run.Scans[i].Scans[j]), mz.Run.Scans[i].Id, c)
+        chans = append(chans, c)
       }
     }
-    r.Scans = scans
+  }
+  for _,c := range chans {
+    s := <-c
+    s.Continuous = mz.Run.Processing.Centroided == 0
+    r.Scans = append(r.Scans, *s)
   }
   return nil
 }
@@ -147,7 +149,8 @@ func (r *RawData) EncodeMzXml(writer io.Writer)error {
 //   s: A pointer to the Scan struct to save the decoded data to
 //   mzs: A pointer to the mzxmlscan object to read the data from
 //   parentScan: The Id of the parent scan, or 0 if none
-func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
+func scanInfo(mzs *mzxmlscan, parentScan uint64, c chan *Scan) {
+  s := new(Scan)
   rt := mzs.RetentionTime
   s.RetentionTime,_ = strconv.ParseFloat(rt[2:len(rt)-1], 64)
   s.RetentionTime /= 60
@@ -180,5 +183,6 @@ func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
     s.MzArray = append(s.MzArray, values[i])
     s.IntensityArray = append(s.IntensityArray, values[i+1])
   }
+  c <- s
 }
 
