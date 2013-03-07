@@ -100,7 +100,7 @@ func (s *Scan) RemoveMz(minMz float64, maxMz float64) uint64 {
   newMz := make([]float64, 0, len(s.MzArray))
   newIntensity := make([]float64, 0, len(s.IntensityArray))
   removed := uint64(0)
-  for i,v := range newMz {
+  for i,v := range s.MzArray {
     if v < minMz || v > maxMz {
       newMz = append(newMz, v)
       newIntensity = append(newIntensity, s.IntensityArray[i])
@@ -125,7 +125,7 @@ func (s *Scan) OnlyMz(minMz float64, maxMz float64) uint64 {
   newMz := make([]float64, 0, len(s.MzArray))
   newIntensity := make([]float64, 0, len(s.IntensityArray))
   removed := uint64(0)
-  for i,v := range newMz {
+  for i,v := range s.MzArray {
     if v > minMz && v < maxMz {
       newMz = append(newMz, v)
       newIntensity = append(newIntensity, s.IntensityArray[i])

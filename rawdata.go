@@ -127,9 +127,9 @@ func (r *RawData) OnlyScans(minTime float64, maxTime float64) uint64{
 //   uint64 The number of peaks removed
 func (r *RawData) RemoveMz(minMz float64, maxMz float64) uint64 {
   removed := uint64(0)
-  for _,s := range r.Scans {
-    if s.MsLevel == 1 {
-      removed += s.RemoveMz(minMz, maxMz)
+  for i := range r.Scans {
+    if r.Scans[i].MsLevel == 1 {
+      removed += r.Scans[i].RemoveMz(minMz, maxMz)
     }
   }
   return removed
@@ -145,9 +145,9 @@ func (r *RawData) RemoveMz(minMz float64, maxMz float64) uint64 {
 //   uint64 The number of peaks removed
 func (r *RawData) OnlyMz(minMz float64, maxMz float64) uint64 {
   removed := uint64(0)
-  for _,s := range r.Scans {
-    if s.MsLevel == 1 {
-      removed += s.OnlyMz(minMz, maxMz)
+  for i := range r.Scans {
+    if r.Scans[i].MsLevel == 1 {
+      removed += r.Scans[i].OnlyMz(minMz, maxMz)
     }
   }
   return removed
