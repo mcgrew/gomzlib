@@ -1,3 +1,17 @@
+//  Copyright 2013 Thomas McGrew
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+
 package mzlib
 
 import (
@@ -106,22 +120,24 @@ func (r *RawData) DecodeMzXml(reader io.Reader) error {
   r.Instrument.Manufacturer = mz.Run.Instrument.Manufacturer.Name
   r.Instrument.MassAnalyzer = mz.Run.Instrument.MassAnalyzer.Name
   r.ScanCount = mz.Run.ScanCount
-  var scans []Scan
   // copy scan information
+  var chans []chan *Scan
   for i:=0; i < len(mz.Run.Scans); i++ {
-    s := new(Scan)
-    s.Continuous = mz.Run.Processing.Centroided == 0
-    scanInfo(s, &(mz.Run.Scans[i]), 0)
-    scans = append(scans, *s)
+    c := make(chan *Scan)
+    go mz.Run.Scans[i].scanInfo(0, c)
+    chans = append(chans, c)
     if len(mz.Run.Scans[i].Scans) > 0 {
       for j:=0; j < len(mz.Run.Scans[i].Scans); j++ {
-        s := new(Scan)
-        s.Continuous = mz.Run.Processing.Centroided == 0
-        scanInfo(s, &(mz.Run.Scans[i].Scans[j]), mz.Run.Scans[i].Id)
-        scans = append(scans, *s)
+        c = make(chan *Scan)
+        go mz.Run.Scans[i].Scans[j].scanInfo(mz.Run.Scans[i].Id, c)
+        chans = append(chans, c)
       }
     }
-    r.Scans = scans
+  }
+  for _,c := range chans {
+    s := <-c
+    s.Continuous = mz.Run.Processing.Centroided == 0
+    r.Scans = append(r.Scans, *s)
   }
   return nil
 }
@@ -145,40 +161,41 @@ func (r *RawData) EncodeMzXml(writer io.Writer)error {
 //
 // Parameters:
 //   s: A pointer to the Scan struct to save the decoded data to
-//   mzs: A pointer to the mzxmlscan object to read the data from
 //   parentScan: The Id of the parent scan, or 0 if none
-func scanInfo( s *Scan, mzs *mzxmlscan, parentScan uint64) {
-  rt := mzs.RetentionTime
+func (m *mzxmlscan) scanInfo(parentScan uint64, c chan *Scan) {
+  s := new(Scan)
+  rt := m.RetentionTime
   s.RetentionTime,_ = strconv.ParseFloat(rt[2:len(rt)-1], 64)
   s.RetentionTime /= 60
-  if mzs.Polarity == "-" {
+  if m.Polarity == "-" {
     s.Polarity = -1
-  } else if mzs.Polarity == "+" {
+  } else if m.Polarity == "+" {
     s.Polarity = 1
   } else {
     s.Polarity = 0 // unknown
   }
-  s.MsLevel = mzs.MsLevel
-  s.Id = mzs.Id
-  s.MzRange[0] = mzs.LowMz
-  s.MzRange[1] = mzs.HighMz
+  s.MsLevel = m.MsLevel
+  s.Id = m.Id
+  s.MzRange[0] = m.LowMz
+  s.MzRange[1] = m.HighMz
   s.ParentScan = parentScan
-  s.PrecursorMz = mzs.Precursor.Mz
-  s.PrecursorIntensity = mzs.Precursor.Intensity
-  s.CollisionEnergy = mzs.CollisionEnergy
+  s.PrecursorMz = m.Precursor.Mz
+  s.PrecursorIntensity = m.Precursor.Intensity
+  s.CollisionEnergy = m.CollisionEnergy
 
   // now decode the peak data
-  s.MzArray = make([]float64, 0, mzs.PeakCount)
-  s.IntensityArray = make([]float64, 0, mzs.PeakCount)
-  values := make([]float64, 0, mzs.PeakCount*2)
+  s.MzArray = make([]float64, 0, m.PeakCount)
+  s.IntensityArray = make([]float64, 0, m.PeakCount)
+  values := make([]float64, 0, m.PeakCount*2)
   // mzxml is always bigEndian per the spec
-  _ = Float64FromBase64(&values, mzs.Peaks.PeakList, mzs.PeakCount*2,
-                        mzs.Peaks.Precision, 
-                        mzs.Peaks.CompressionType == "zlib", binary.BigEndian)
+  _ = Float64FromBase64(&values, m.Peaks.PeakList, m.PeakCount*2,
+                        m.Peaks.Precision, 
+                        m.Peaks.CompressionType == "zlib", binary.BigEndian)
   n := len(values)
   for i := 0 ; i < n; i+=2 {
     s.MzArray = append(s.MzArray, values[i])
     s.IntensityArray = append(s.IntensityArray, values[i+1])
   }
+  c <- s
 }
 
