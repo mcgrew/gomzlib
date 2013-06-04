@@ -1,0 +1,383 @@
+PACKAGE DOCUMENTATION
+
+package mzlib
+    import "github.com/mcgrew/gomzlib"
+
+
+
+CONSTANTS
+
+const (
+    // The mzlib version.
+    Version string = "0.2.2013.03.07"
+)
+
+
+FUNCTIONS
+
+func Base64FromFloat64(src *[]float64, precision int,
+    byteOrder binary.ByteOrder) string
+    Converts an array of float64 to a base64 string
+
+func Float64FromBase64(dst *[]float64, src string, peakCount uint64,
+    precision uint8, compressed bool,
+    byteOrder binary.ByteOrder) int
+    Converts a base64 string to an array of float64
+
+    Parameters:
+
+	dst: The destination array.
+	src: The base64 encoded source string.
+	peakCount: The number of peaks present in the encoded string.
+	precision: The number of bits in each value, either 32 or 64.
+	compressed: Whether or not the data is compressed with zlib.
+	byteOrder: The byte order of the data, either binary.BigEndian or
+	  binary.LittleEndian
+
+
+TYPES
+
+type Instrument struct {
+    Manufacturer string
+    Model        string
+    MassAnalyzer string
+    Detector     string
+    Resolution   float64
+    Accuracy     float64
+    Ionization   string
+}
+    Represents instrument metadata from the read in file.
+
+
+
+type RawData struct {
+    Filename   string
+    SourceFile string
+    Instrument Instrument
+    ScanCount  uint64
+    Scans      []Scan
+}
+    Represents the raw data from a mass spectrometry file.
+
+
+func (r *RawData) Bpc() []float64
+    Returns a base peak chromatogram for the data.
+
+    Return value: []float64: An array containing the intensity of the
+    largest peak for each
+
+	level 1 scan
+
+func (r *RawData) Clone() RawData
+
+func (r *RawData) DecodeJson(reader io.Reader) error
+
+func (r *RawData) DecodeJsonGz(reader io.Reader) error
+
+func (r *RawData) DecodeMzData(reader io.Reader) error
+    Decodes data from a Reader containing MzData formatted data
+
+    Parameters:
+
+	reader: The reader to read raw data from
+
+    Return value:
+
+	error: Indicates whether or not an error occurred when reading the data
+
+func (r *RawData) DecodeMzMl(reader io.Reader) error
+
+func (r *RawData) DecodeMzXml(reader io.Reader) error
+    Decodes data from a Reader containing MzXML formatted data
+
+    Parameters:
+
+	reader: The reader to read raw data from
+
+    Return value:
+
+	error: Indicates whether or not an error occurred when reading the data
+
+func (r *RawData) EncodeJson(writer io.Writer) error
+
+func (r *RawData) EncodeJsonGz(writer io.Writer) error
+
+func (r *RawData) EncodeMzData(writer io.Writer) error
+
+func (r *RawData) EncodeMzMl(writer io.Writer) error
+
+func (r *RawData) EncodeMzXml(writer io.Writer) error
+
+func (r *RawData) GetScan(retentionTime float64) *Scan
+    Retreives the scan closest to the specified retention time
+
+    Paramters:
+
+	retentionTime: The retention time value in minutes to locate the scan for.
+
+func (r *RawData) MaxMz() float64
+    Finds the maximum m/z value in the data.
+
+    Return value:
+
+	float64: The maximum m/z value.
+
+func (r *RawData) MinMz() float64
+    Finds the minimum m/z value in the data.
+
+    Return value:
+
+	float64: The minimum m/z value.
+
+func (r *RawData) OnlyMz(minMz float64, maxMz float64) uint64
+    Removes any peaks outside the given range.
+
+    Parameters:
+
+	minMz: The minimum m/z value to be retained
+	maxMz: The maximum m/z value to be retained
+
+    Return value:
+
+	uint64 The number of peaks removed
+
+func (r *RawData) OnlyScans(minTime float64, maxTime float64) uint64
+    Removes any scans outside the specified range.
+
+    Parameters:
+
+	minTime: The minimum retention time value in minutes to retain (inclusive).
+	maxTime: The maximum retention time value in minutes to retain (exclusive).
+
+    Return value:
+
+	uint64: The number of scans removed
+
+func (r *RawData) PeakIntensity() float64
+    Finds the maximum intensity value in the data.
+
+func (r *RawData) Read(filename string) error
+    Reads mass spectrometry data from the specified file. The format is
+    auto-detected based on the file name.
+
+    Parameters:
+
+	filename: The name of the file to be written to
+
+    Return value:
+
+	error: Indicates whether or not an error occurred while reading the file
+
+func (r *RawData) ReadJson(filename string) error
+
+func (r *RawData) ReadJsonGz(filename string) error
+
+func (r *RawData) ReadMzData(filename string) error
+    Reads data from an MzData file
+
+    Paramters:
+
+	filename: The name of the file to read from
+
+    Return value:
+
+	error: Indicates whether or not an error occurred while reading the file
+
+func (r *RawData) ReadMzMl(filename string) error
+
+func (r *RawData) ReadMzXml(filename string) error
+    Reads data from an MzXML file
+
+    Paramters:
+
+	filename: The name of the file to read from
+
+    Return value:
+
+	error: Indicates whether or not an error occurred while reading the file
+
+func (r *RawData) RemoveMz(minMz float64, maxMz float64) uint64
+    Removes any peaks inside the given range.
+
+    Parameters:
+
+	minMz: The minimum m/z value to be removed
+	maxMz: The maximum m/z value to be removed
+
+    Return value:
+
+	uint64 The number of peaks removed
+
+func (r *RawData) RemoveScans(minTime float64, maxTime float64) uint64
+    Removes any scans inside the specified range.
+
+    Parameters:
+
+	minTime: The minimum retention time value in minutes to discard (inclusive)
+	maxTime: The maximum retention time value in minutes to discard (exclusive)
+
+    Return value:
+
+	uint64: The number of scans removed
+
+func (r *RawData) Sic(minMz float64, maxMz float64) []float64
+    Returns a selected ion chromatogram for the data.
+
+    Parameters:
+
+	minMz: The minimum m/z value to select peaks from.
+	maxMz: The maximum m/z value to select peaks from.
+
+    Return value: []float64: An array containing the total intensity of all
+    peaks between
+
+	minMz and maxMz for each scan.
+
+func (r *RawData) Tic() []float64
+    Returns a total ion chromatogram for the data.
+
+    Return value: []float64: An array containing the total intensity for
+    each scan.
+
+func (r *RawData) Write(filename string) error
+    Writes mass spectrometry data to the specified file. The format is auto-
+
+	detected base on the file name.
+
+func (r *RawData) WriteJson(filename string) error
+
+func (r *RawData) WriteJsonGz(filename string) error
+
+func (r *RawData) WriteMzData(filename string) error
+    Writes the data to disk in MzData format
+
+    Parameters:
+
+	filename: The name of the file to be written to
+
+    Return value:
+
+	error: Indicates whether or not an error occurred while writing the file
+
+func (r *RawData) WriteMzMl(filename string) error
+
+func (r *RawData) WriteMzXml(filename string) error
+    Writes the data to disk in MzXML format
+
+    Parameters:
+
+	filename: The name of the file to be written to
+
+    Return value:
+
+	error: Indicates whether or not an error occurred while writing the file
+
+
+type Scan struct {
+    RetentionTime      float64
+    Polarity           int8
+    MsLevel            uint8
+    Id                 uint64
+    MzRange            [2]float64
+    ParentScan         uint64
+    PrecursorMz        float64
+    PrecursorIntensity float64
+    CollisionEnergy    float64
+    Continuous         bool
+    DeIsotoped         bool
+    MzArray            []float64
+    IntensityArray     []float64
+}
+    Represents a single scan in the mass spectrometry data.
+
+
+func (s *Scan) Centralize(accuracy float64)
+    Centralizes the scan values, converting from continuous to discrete data
+
+
+    This method is not yet implemented
+
+    Parameters:
+
+	accuracy: The accuracy of the instrument which collected the values. All
+	  m/z values within this range of the local peak intensity will be merged.
+
+func (s *Scan) Clone() *Scan
+
+func (s *Scan) DeIsotope(accuracy float64)
+    DeIsotopes the scan, combining all isotopic peaks into the main peak.
+
+
+    This method is not yet implemented
+
+    Parameters:
+
+	accuracy: The accuracy of the instrument which collected the values. All
+	  m/z values within this range of the local peak intensity will be merged.
+
+func (s *Scan) MaxMz() float64
+    Returns the maximum m/z value in the scan
+
+    Return value:
+
+	float64: The maximum m/z value in the scan
+
+func (s *Scan) MinMz() float64
+    Returns the minimum m/z value in the scan
+
+    Return value:
+
+	float64: The minimum m/z value in the scan
+
+func (s *Scan) OnlyMz(minMz float64, maxMz float64) uint64
+    Removes any peaks outside the specified range
+
+    Parameters:
+
+	minMz: The minimum m/z value to be retained
+	maxMz: The maximum m/z value to be retained
+
+    Return value:
+
+	uint64: The number of peaks removed
+
+func (s *Scan) PeakIntensity() float64
+    Finds the Peak intensity in the scan
+
+    Return value:
+
+	float64: The peak intensity value in the scan
+
+func (s *Scan) RemoveMz(minMz float64, maxMz float64) uint64
+    Removes any peaks inside the specified range
+
+    Parameters:
+
+	minMz: The minimum m/z value to be removed
+	maxMz: The maximum m/z value to be removed
+
+    Return value:
+
+	uint64: The number of peaks removed
+
+func (s *Scan) SelectedIntensity(minMz float64, maxMz float64) float64
+    Finds the total intensity of peaks inside the given range
+
+    Parameters:
+
+	minMz: The minimum m/z value to consider
+	maxMz: The maximum m/z value to consider
+
+    Return value:
+
+	float64: The selected intensity value
+
+func (s *Scan) TotalIntensity() float64
+    Finds the total intensity of the scan
+
+    Return value:
+
+	float64: The total intensity of the scan
+
+
+
