@@ -69,6 +69,7 @@ func (r *RawData) Bpc() []float64
 	level 1 scan
 
 func (r *RawData) Clone() RawData
+    Creates a copy of this RawData object
 
 func (r *RawData) DecodeJson(reader io.Reader) error
 
@@ -114,6 +115,9 @@ func (r *RawData) GetScan(retentionTime float64) *Scan
     Paramters:
 
 	retentionTime: The retention time value in minutes to locate the scan for.
+
+func (r *RawData) Level1() RawData
+    Creates a copy of this RawData object containing only level 1 scans.
 
 func (r *RawData) MaxMz() float64
     Finds the maximum m/z value in the data.

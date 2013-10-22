@@ -46,6 +46,7 @@ type Instrument struct {
 	Ionization   string
 }
 
+// Creates a copy of this RawData object
 func (r *RawData) Clone() RawData {
 	cpy := RawData{}
 	cpy.Filename = r.Filename
@@ -61,6 +62,27 @@ func (r *RawData) Clone() RawData {
 	for _, s := range r.Scans {
 		cpy.Scans = append(cpy.Scans, *s.Clone())
 	}
+	return cpy
+}
+
+// Creates a copy of this RawData object containing only level 1 scans.
+func (r *RawData) Level1() RawData {
+	cpy := RawData{}
+	cpy.Filename = r.Filename
+	cpy.SourceFile = r.SourceFile
+	cpy.Instrument.Manufacturer = r.Instrument.Manufacturer
+	cpy.Instrument.Model = r.Instrument.Model
+	cpy.Instrument.MassAnalyzer = r.Instrument.MassAnalyzer
+	cpy.Instrument.Detector = r.Instrument.Detector
+	cpy.Instrument.Resolution = r.Instrument.Resolution
+	cpy.Instrument.Accuracy = r.Instrument.Accuracy
+	cpy.Instrument.Ionization = r.Instrument.Ionization
+	for _, s := range r.Scans {
+    if s.MsLevel == 1 {
+      cpy.Scans = append(cpy.Scans, *s.Clone())
+    }
+	}
+	cpy.ScanCount = uint64(len(cpy.Scans))
 	return cpy
 }
 
